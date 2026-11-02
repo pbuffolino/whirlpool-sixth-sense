@@ -138,4 +138,7 @@ async def test_fabriccare_category_is_not_routed(
     # The HTTP backend's category name; no AWS thing has reported it.
     thing = _laundry_thing("FabricCare", WASHER_CAP_PART)
     manager = await connect_laundry([thing], {WASHER_CAP_PART: WASHER_CAPABILITY})
-    assert manager.all_appliances == {}
+    assert manager.washers == []
+    (unsupported,) = manager.unsupported_appliances
+    assert unsupported.said == WASHER_SAID
+    assert manager.all_appliances == {WASHER_SAID: unsupported}
