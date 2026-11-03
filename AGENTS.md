@@ -123,29 +123,43 @@ Enabled rules: `E` (pycodestyle), `F` (Pyflakes), `UP` (pyupgrade), `B` (flake8-
 
 Max complexity: 25
 
-## CI/CD Pipeline
+## Shipping the personal fork
 
-GitHub Actions runs on push/PR (`.github/workflows/ci.yml`):
-1. **prek** - Lint, format and type checks (ruff, basedpyright) plus a zizmor
-   workflow audit
-2. **pytest** - Tests (Python 3.14)
-3. **zizmor** - Static analysis of the GitHub Actions workflows
+For `pbuffolino/whirlpool-sixth-sense`, ordinary checks run locally and independent
+native Codex reviewers review the exact candidate. Hosted CI and automatic PR
+label checks are retired. Do not interpret missing Actions checks as a pass.
 
-Other workflows:
-- **pr-labels** - Requires every PR to carry one of the release-drafter labels
-  (`breaking-change`, `bugfix`, `ci`, `dependencies`, `documentation`,
-  `enhancement`, `maintenance`, `new-feature`)
-- **release-drafter** - Keeps a draft release up to date on every push to
-  `master`, resolving the next version from the merged PRs' labels
-- **publish** - Triggered when a release is published: injects the release tag
-  as the package version, builds, and uploads to PyPI via trusted publishing
+Create an isolated Python 3.14+ environment and install `requirements-dev.txt`.
+Activate it, commit the candidate, then run `bash scripts/check-local.sh` from a
+clean worktree. The command preserves pytest and all pinned prek hooks, including
+Ruff, basedpyright, whitespace checks and zizmor. Hooks may format files. Any
+changed source requires review, a new candidate commit and a rerun. Use only the
+synthetic HTTP fixtures, never appliance credentials or live appliance calls.
+
+Record the candidate SHA, Python/tool versions, actual command result and separate
+Codex review findings in the PR. Use a proper PR and recheck its head before
+merging. Release/security changes require separate code and security reviewers.
+Reviewers must be independent of the implementer. Skips, missing tools and failed
+checks remain limitations. Never forge a status or bypass a required check.
+
+The local checkout may have `origin` pointing at the upstream `abmantis` project.
+Verify owner and repository before every push or GitHub write. This personal-fork
+policy authorizes no upstream write or upstream package publication.
+
+The inherited release-drafter and PyPI definitions remain pending the owner's
+decision about this fork's release purpose. Their presence does not prove an
+operational or authorized publisher. Do not publish a release, register a trusted
+publisher or contact PyPI to validate these definitions.
 
 ### Releasing
 
-Releases are manual: publish the draft release that release-drafter maintains,
-and `publish.yml` takes it from there. The `version` in `pyproject.toml` is a
-`0.0.0` placeholder — the release tag is the source of truth, so do not bump it
-by hand.
+The upstream release process uses a release tag to replace the `0.0.0` package
+version placeholder. It is not an approved release target for this personal
+fork. Establish the intended package identity and owner-approved target before
+any publication. Source merge, package build, installation and live appliance
+acceptance are separate states; only perform the latter operations when scoped
+authorization exists. Preserve the applicable upstream contribution procedure
+when preparing a separately authorized upstream contribution.
 
 Dependency and action updates are handled by Renovate (`.github/renovate.json`);
 GitHub Actions are pinned to commit digests.
