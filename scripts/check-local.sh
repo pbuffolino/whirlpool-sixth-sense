@@ -2,6 +2,12 @@
 # Run from a clean, frozen candidate; prek may apply formatting fixes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+for selector in PREK_SKIP SKIP PYTEST_ADDOPTS; do
+  if [[ -n "${!selector:-}" ]]; then
+    echo "$selector must be empty for complete local validation." >&2
+    exit 2
+  fi
+done
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "Commit the candidate first; local validation requires a clean worktree." >&2
   exit 2
