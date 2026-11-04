@@ -21,3 +21,5 @@ jobs:
       pull-requests: read
     steps:
       - uses: release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7.10.0
+        with:
+          publish: false

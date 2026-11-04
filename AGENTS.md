@@ -125,8 +125,8 @@ Max complexity: 25
 
 ## Shipping the personal fork
 
-`pbuffolino/whirlpool-sixth-sense` is our actively maintained fork. Ordinary checks run locally and independent
-native Codex reviewers review the exact candidate. Hosted CI and automatic PR
+`pbuffolino/whirlpool-sixth-sense` is our actively maintained fork. Ordinary checks
+run locally and independent native Codex reviewers review the exact candidate. Hosted CI and automatic PR
 label checks are retired. Do not interpret missing Actions checks as a pass.
 
 Create an isolated Python 3.14+ environment and install `requirements-dev.txt`.
