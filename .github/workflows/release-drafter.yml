@@ -7,11 +7,19 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: fork-release-draft-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   update_release_draft:
+    if: github.repository == 'pbuffolino/whirlpool-sixth-sense'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
       pull-requests: read
     steps:
       - uses: release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7.10.0
+        with:
+          publish: false

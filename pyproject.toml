@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whirlpool_sixth_sense"
-# Placeholder; the publish workflow injects the release tag as the version.
+# Upstream placeholder retained; this fork uses GitHub releases, not PyPI uploads.
 version = "0.0.0"
 license = "MIT"
 authors = [{ name = "Abílio Costa", email = "amfcalt@gmail.com" }]
