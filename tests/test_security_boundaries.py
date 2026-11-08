@@ -121,6 +121,8 @@ async def test_auth_cache_load_refuses_nonregular_or_public_file(
         "http://caps.whrcloud.com/profile",
         "https://caps.whrcloud.com.evil.invalid/profile",
         "https://user:pass@caps.whrcloud.com/profile",
+        "https://@caps.whrcloud.com/profile",
+        "https://:@caps.whrcloud.com/profile",
         "https://caps.whrcloud.com:444/profile",
         "https://127.0.0.1/profile",
         "https://[::1]/profile",

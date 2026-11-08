@@ -409,8 +409,8 @@ class CapabilityDownloader:
             parsed = urlsplit(url)
             valid = (
                 parsed.scheme == "https"
-                and not parsed.username
-                and not parsed.password
+                and parsed.username is None
+                and parsed.password is None
                 and parsed.port in (None, 443)
                 and not parsed.fragment
                 and any(
