@@ -92,3 +92,8 @@ but does not establish tenant ownership. Redirects, URL credentials, nonstandard
 ports and fragments are refused. A 10-second total timeout and 2 MiB decompressed
 body limit bound each attempt. Tighten to exact provider hosts when sanitized
 hostname evidence becomes available, with compatibility tests before release.
+
+The legacy HTTP backend also logged the WebSocket CONNECT frame, containing the
+access token, plus incoming frames, owned-device data and command payloads. Those
+logs are now fixed operational messages, with token/frame regression coverage.
+HTTP command POSTs also refuse redirects so a 307/308 cannot replay device data.

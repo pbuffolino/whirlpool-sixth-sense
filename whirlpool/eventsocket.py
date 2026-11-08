@@ -63,18 +63,18 @@ class EventSocket:
             await self._send_msg(ws, msg)
 
     async def _send_msg(self, websocket: aiohttp.ClientWebSocketResponse, msg):
-        LOGGER.debug(f"> {msg}")
+        LOGGER.debug("Sending WebSocket frame")
         await websocket.send_str(msg + MSG_TERMINATION)
 
     async def _recv_msg(self, websocket: aiohttp.ClientWebSocketResponse):
         msg = await websocket.receive()
-        LOGGER.debug(f"< {msg}")
+        LOGGER.debug("Received WebSocket frame")
         return msg
 
     async def _run(self):
         while self._running:
             try:
-                LOGGER.debug(f"Connecting to {self._url}")
+                LOGGER.debug("Connecting to WebSocket")
                 async with self._session.ws_connect(
                     self._url,
                     timeout=aiohttp.ClientWSTimeout(ws_receive=60, ws_close=60),  # type: ignore # ClientWSTimeout uses attr.s which pyright does not support
@@ -157,8 +157,8 @@ class EventSocket:
                         if not match:
                             continue
                         self._msg_listener("{" + match[0] + "}")
-            except (aiohttp.ClientError, TimeoutError, gaierror) as ex:
-                LOGGER.error(f"Websocket could not connect: {ex}")
+            except aiohttp.ClientError, TimeoutError, gaierror:
+                LOGGER.error("WebSocket could not connect")
 
             self._websocket = None
 

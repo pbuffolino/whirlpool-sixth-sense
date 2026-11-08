@@ -301,3 +301,67 @@ async def test_things_error_body_is_not_logged(
     ]
     assert records
     assert all(SENTINEL not in record.getMessage() for record in records)
+
+
+async def test_websocket_connect_token_and_frames_are_not_logged(
+    auth: Auth,
+    client_session_fixture: aiohttp.ClientSession,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from whirlpool.eventsocket import EventSocket
+
+    caplog.set_level(logging.DEBUG)
+    auth._auth_dict = {"access_token": SENTINEL}
+    socket = EventSocket(
+        f"wss://example.invalid/{SENTINEL}",
+        auth,
+        [SENTINEL],
+        lambda message: None,
+        AsyncMock(),
+        client_session_fixture,
+    )
+    transport = AsyncMock()
+    transport.receive.return_value = aiohttp.WSMessage(
+        aiohttp.WSMsgType.TEXT, SENTINEL, ""
+    )
+    frame = socket._create_connect_msg()
+    assert SENTINEL in frame
+    await socket._send_msg(transport, frame)
+    await socket._send_subscribe_messages(transport)
+    await socket._recv_msg(transport)
+    assert SENTINEL not in caplog.text
+    assert transport.send_str.await_count == 2
+
+
+async def test_http_command_redirect_cannot_replay_device_data(
+    auth: Auth,
+    backend_selector: BackendSelector,
+    client_session_fixture: aiohttp.ClientSession,
+    aiointercept_mock: aiointercept,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from whirlpool.httpapi.appliance import Appliance
+    from whirlpool.types import ApplianceInfo
+
+    caplog.set_level(logging.DEBUG)
+    appliance = Appliance(
+        backend_selector,
+        auth,
+        client_session_fixture,
+        ApplianceInfo(SENTINEL, SENTINEL, "laundry", SENTINEL, SENTINEL),
+    )
+    target = "https://third-party.invalid/command"
+    aiointercept_mock.post(
+        backend_selector.appliance_command_url,
+        status=307,
+        headers={"Location": target},
+        body=SENTINEL,
+        repeat=True,
+    )
+    aiointercept_mock.post(target, payload={"private": SENTINEL})
+    assert await appliance.send_attributes({"private": SENTINEL}) is False
+    assert ("POST", URL(target)) not in aiointercept_mock.requests
+    records = [
+        record for record in caplog.records if record.name.startswith("whirlpool")
+    ]
+    assert all(SENTINEL not in record.getMessage() for record in records)
