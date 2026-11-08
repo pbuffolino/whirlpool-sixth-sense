@@ -50,7 +50,7 @@ class Appliance(BaseAppliance):
         for _ in range(REQUEST_RETRY_COUNT):
             async with asyncio.timeout(30):
                 async with self._session.get(
-                    uri, headers=self._auth.create_headers()
+                    uri, headers=self._auth.create_headers(), allow_redirects=False
                 ) as r:
                     if r.status == 200:
                         self._data_dict = json.loads(await r.text())
@@ -72,7 +72,7 @@ class Appliance(BaseAppliance):
             LOGGER.error("Session not started")
             return False
 
-        LOGGER.info(f"Sending attributes: {attributes}")
+        LOGGER.info("Sending appliance attributes")
 
         cmd_data = {
             "body": attributes,
@@ -84,8 +84,9 @@ class Appliance(BaseAppliance):
                     self._backend_selector.appliance_command_url,
                     json=cmd_data,
                     headers=self._auth.create_headers(),
+                    allow_redirects=False,
                 ) as r:
-                    LOGGER.debug(f"Reply: {await r.text()}")
+                    LOGGER.debug("Appliance command HTTP status: %d", r.status)
                     if r.status == 200:
                         return True
                     elif r.status == 401:
@@ -113,7 +114,7 @@ class Appliance(BaseAppliance):
             callback()
 
     def _set_attribute(self, attribute: str, value: str, timestamp: int):
-        LOGGER.debug(f"Updating attribute {attribute} with {value} ({timestamp})")
+        LOGGER.debug("Updating appliance attribute")
         self._data_dict["attributes"][attribute]["value"] = value
         self._data_dict["attributes"][attribute]["updateTime"] = timestamp
 

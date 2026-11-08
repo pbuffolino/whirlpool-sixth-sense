@@ -16,7 +16,10 @@ from .auth import Auth, AuthException
 from .capabilities import (
     CapabilityDownloader,
     CapabilityDownloadError,
+    has_dryer_cavity,
     has_microwave_cavity,
+    has_washer_cavity,
+    parse_laundry_capability_profile,
     parse_microwave_capability_profile,
 )
 from .dryer import Dryer
@@ -101,11 +104,11 @@ class AppliancesManager:
             if not await self._mqtt.connect():
                 LOGGER.error("Failed to connect to MQTT broker")
                 return False
-        except AuthException as e:
-            LOGGER.error("Authentication failed: %s", e)
+        except AuthException:
+            LOGGER.error("Authentication failed")
             return False
-        except (TimeoutError, aiohttp.ClientError) as e:
-            LOGGER.error("Failed to connect to AWS IoT: %s", e)
+        except TimeoutError, aiohttp.ClientError:
+            LOGGER.error("Failed to connect to AWS IoT")
             return False
 
         for thing in things_list:
@@ -122,7 +125,7 @@ class AppliancesManager:
         await self._mqtt.disconnect()
 
     async def _add_appliance(self, thing: dict[str, Any]) -> None:
-        LOGGER.debug("Adding thing: %s", thing)
+        LOGGER.debug("Adding discovered appliance")
         thing_attrs = thing.get("attributes", {})
         try:
             name = bytes.fromhex(thing_attrs.get("Name", "")).decode("utf-8")
@@ -140,21 +143,14 @@ class AppliancesManager:
 
         cap_part = thing_attrs.get("CapabilityPartNumber")
         if not cap_part:
-            LOGGER.error(
-                "Thing %s has no CapabilityPartNumber — skipping",
-                appliance_data.said,
-            )
+            LOGGER.error("Appliance has no capability part number, skipping")
             return
         try:
             raw_capabilities = await self._capability_downloader.get(
                 appliance_data.said, appliance_data.model_number, cap_part
             )
-        except CapabilityDownloadError as e:
-            LOGGER.error(
-                "Capability download failed for %s: %s — skipping",
-                appliance_data.said,
-                e,
-            )
+        except CapabilityDownloadError:
+            LOGGER.error("Capability download failed, skipping appliance")
             return
 
         appliance: Appliance | None = None
@@ -166,12 +162,33 @@ class AppliancesManager:
                     parse_microwave_capability_profile(raw_capabilities),
                 )
                 self._microwaves[appliance_data.said] = appliance
+        elif appliance_data.category == "laundry":
+            # Washers and dryers both report category "laundry"; the capability
+            # file's cavity tells them apart.
+            washer = has_washer_cavity(raw_capabilities)
+            dryer = has_dryer_cavity(raw_capabilities)
+            if washer and not dryer:
+                appliance = Washer(
+                    self._mqtt,
+                    appliance_data,
+                    parse_laundry_capability_profile(raw_capabilities, "washer"),
+                )
+                self._washers[appliance_data.said] = appliance
+            elif dryer and not washer:
+                appliance = Dryer(
+                    self._mqtt,
+                    appliance_data,
+                    parse_laundry_capability_profile(raw_capabilities, "dryer"),
+                )
+                self._dryers[appliance_data.said] = appliance
+            else:
+                LOGGER.warning(
+                    "Laundry appliance skipped: capability must declare "
+                    "exactly one of washer or dryer"
+                )
+                return
         if appliance is None:
-            LOGGER.warning(
-                "Unsupported appliance category %s for %s",
-                appliance_data.category,
-                thing["thingName"],
-            )
+            LOGGER.warning("Unsupported appliance category")
             appliance = Appliance(self._mqtt, appliance_data)
             self._unsupported_appliances[appliance_data.said] = appliance
 
@@ -181,7 +198,7 @@ class AppliancesManager:
         self.__dict__.pop("all_appliances", None)
 
     def _handle_mqtt_message(self, topic: str, payload: dict[str, Any]) -> None:
-        LOGGER.debug("Received MQTT message on topic %s: %s", topic, payload)
+        LOGGER.debug("Routing MQTT message")
 
         if self._capability_downloader.handle_message(topic, payload):
             return
@@ -219,7 +236,7 @@ class AppliancesManager:
 
         appliance = self.all_appliances.get(said)
         if appliance is None:
-            LOGGER.warning("Received message for unknown appliance %s", said)
+            LOGGER.warning("Received message for unknown appliance")
             return
         appliance.update_state(state)
         # No presence event comes at connect for an appliance that is already

@@ -58,11 +58,11 @@ class MqttClient:
         try:
             old.loop_stop()
         except Exception:
-            LOGGER.debug("Error stopping MQTT client loop", exc_info=True)
+            LOGGER.debug("Error stopping MQTT client loop")
         try:
             old.disconnect()
         except Exception:
-            LOGGER.debug("Error disconnecting MQTT client", exc_info=True)
+            LOGGER.debug("Error disconnecting MQTT client")
 
     async def connect(self) -> bool:
         """Connect to the MQTT broker."""
@@ -77,7 +77,7 @@ class MqttClient:
         signed_url = self._run_on_loop(self._aws_auth.create_signed_url, MQTT_ENDPOINT)
         client_id = self._generate_client_id()
 
-        LOGGER.debug("MQTT Client ID: %s", client_id)
+        LOGGER.debug("MQTT client identity prepared")
         LOGGER.debug("Connecting to: wss://%s/mqtt", MQTT_ENDPOINT)
 
         client = mqtt.Client(
@@ -112,7 +112,7 @@ class MqttClient:
         try:
             client.connect(MQTT_ENDPOINT, port=443, keepalive=30)
         except Exception:
-            LOGGER.debug("Failed to connect to MQTT broker", exc_info=True)
+            LOGGER.debug("Failed to connect to MQTT broker")
             return False
 
         self._client = client
@@ -133,7 +133,6 @@ class MqttClient:
             "MQTT connected, subscribing %d to topics...", len(self._subscribed_topics)
         )
         for topic in self._subscribed_topics:
-            LOGGER.debug("  - %s", topic)
             self._client.subscribe(topic, qos=1)
 
         self._client_id = client_id
@@ -228,17 +227,19 @@ class MqttClient:
     ) -> None:
         """Callback when a message is received."""
         if not self._is_active_client(client):
-            LOGGER.debug("Ignoring message from stale MQTT client on %s", msg.topic)
+            LOGGER.debug("Ignoring message from stale MQTT client")
             return
-        LOGGER.debug("MQTT message on topic: %s", msg.topic)
+        LOGGER.debug("MQTT message received")
 
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            LOGGER.warning("Failed to decode message: %s", e)
+        except json.JSONDecodeError, UnicodeDecodeError:
+            LOGGER.warning("Failed to decode MQTT message")
             return
 
-        LOGGER.debug("Payload: %s", json.dumps(payload, indent=2))
+        if not isinstance(payload, dict):
+            LOGGER.warning("Ignoring MQTT message with non-object payload")
+            return
 
         if self._message_callback:
             self._loop.call_soon_threadsafe(self._message_callback, msg.topic, payload)
@@ -282,9 +283,8 @@ class MqttClient:
                 if self._worker_connect():
                     LOGGER.info("MQTT reconnected successfully")
                     return
-            except Exception as e:
-                LOGGER.warning("MQTT reconnect attempt failed: %s", e)
-                LOGGER.debug("MQTT reconnect attempt traceback", exc_info=True)
+            except Exception:
+                LOGGER.warning("MQTT reconnect attempt failed")
 
             delay = min(delay * 2, RECONNECT_BACKOFF_CAP_SECONDS)
 

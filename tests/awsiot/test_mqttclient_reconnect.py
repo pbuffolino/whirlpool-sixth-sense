@@ -109,7 +109,7 @@ class TestReconnect:
 
         await client.disconnect()
 
-    async def test_failed_reconnect_logs_concise_warning_and_debug_traceback(
+    async def test_failed_reconnect_logs_concise_warning_without_private_exception(
         self,
         mock_aws_auth: AsyncMock,
         paho: FakePahoBroker,
@@ -126,30 +126,17 @@ class TestReconnect:
             "temporary auth failure"
         )
         paho.clients[0].fire_disconnect(is_failure=True)
-        await _wait_for(
-            lambda: _logged(
-                caplog, "MQTT reconnect attempt failed: temporary auth failure"
-            )
-        )
+        await _wait_for(lambda: _logged(caplog, "MQTT reconnect attempt failed"))
 
         records = [record for record in caplog.records if record.name == LOGGER_NAME]
         assert any(
             record.levelno == logging.WARNING
-            and record.message
-            == "MQTT reconnect attempt failed: temporary auth failure"
+            and record.message == "MQTT reconnect attempt failed"
             and record.exc_info is None
             for record in records
         )
-        assert any(
-            record.levelno == logging.DEBUG
-            and record.message == "MQTT reconnect attempt traceback"
-            and record.exc_info is not None
-            for record in records
-        )
-        assert not any(
-            record.levelno >= logging.WARNING and record.exc_info is not None
-            for record in records
-        )
+        assert "temporary auth failure" not in caplog.text
+        assert all(record.exc_info is None for record in records)
 
         await client.disconnect()
 

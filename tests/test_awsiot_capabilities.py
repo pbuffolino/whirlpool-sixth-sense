@@ -149,7 +149,7 @@ MODEL = "MODEL-A"
 PART = "W1111"
 REQ_TOPIC = f"api/capability/download/{MODEL}/{SAID}"
 RESP_TOPIC = f"{REQ_TOPIC}/response"
-CAP_URL = "https://caps.example.com/profile.json"
+CAP_URL = "https://caps.whrcloud.com/profile.json"
 # Shape of the broker's reply on api/capability/download/.../response
 CAP_RESPONSE = {"responseCode": 200, "downloadUrl": CAP_URL}
 FIXTURE_JSON = {
@@ -363,7 +363,7 @@ class TestDownloaderFetchBody:
                 RESP_TOPIC, {"responseCode": 404, "downloadUrl": CAP_URL}
             )
 
-        with pytest.raises(CapabilityDownloadError, match="responseCode 404"):
+        with pytest.raises(CapabilityDownloadError, match="Capability download failed"):
             await asyncio.gather(respond(), downloader.get(SAID, MODEL, PART))
 
     async def test_document_without_part_number_is_download_error(

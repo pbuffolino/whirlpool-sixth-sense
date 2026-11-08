@@ -110,7 +110,7 @@ class AppliancesManager:
             "ddm_cooking_whr_trs_bio_single_v1",
         ]
 
-        LOGGER.debug("Adding appliance %s", appliance_data)
+        LOGGER.debug("Adding discovered appliance")
         if "airconditioner" in data_model:
             self._aircons[appliance_data.said] = Aircon(
                 self._backend_selector, self._auth, self._session, appliance_data
@@ -132,7 +132,7 @@ class AppliancesManager:
                 self._backend_selector, self._auth, self._session, appliance_data
             )
         else:
-            LOGGER.warning("Unsupported appliance data model %s", data_model)
+            LOGGER.warning("Unsupported appliance data model")
             self._unsupported_appliances[appliance_data.said] = Appliance(
                 self._backend_selector, self._auth, self._session, appliance_data
             )
@@ -144,13 +144,14 @@ class AppliancesManager:
         async with self._session.get(
             self._backend_selector.get_owned_appliances_url(account_id),
             headers=self._auth.create_headers(),
+            allow_redirects=False,
         ) as r:
             if r.status != 200:
                 LOGGER.error("Failed to get appliances: %s", r.status)
                 return False
 
             data = await r.json()
-            LOGGER.debug("Owned appliances data: %s", data)
+            LOGGER.debug("Retrieved owned appliances")
             locations: dict[str, Any] = data[account_id]
             appliances = [
                 appliance
@@ -170,7 +171,9 @@ class AppliancesManager:
         headers["WP-CLIENT-BRAND"] = self._backend_selector.brand.name
 
         async with self._session.get(
-            self._backend_selector.shared_appliances_url, headers=headers
+            self._backend_selector.shared_appliances_url,
+            headers=headers,
+            allow_redirects=False,
         ) as r:
             if r.status != 200:
                 LOGGER.warning(
@@ -263,22 +266,24 @@ class AppliancesManager:
                 continue
             try:
                 await appliance.fetch_data()
-            except Exception as ex:
-                LOGGER.warning("Keepalive fetch failed: %s", ex)
+            except Exception:
+                LOGGER.warning("Keepalive fetch failed")
 
     def _event_socket_callback(self, msg: str):
         json_msg = json.loads(msg)
         said = json_msg["said"]
         app = self.all_appliances.get(said)
         if app is None:
-            LOGGER.warning("Received message for unknown appliance %s", said)
+            LOGGER.warning("Received message for unknown appliance")
             return
         app.update_attributes(json_msg["attributeMap"], json_msg["timestamp"])
 
     async def _getWebsocketUrl(self) -> str:
         DEFAULT_WS_URL = "wss://ws.emeaprod.aws.whrcloud.com/appliance/websocket"
         async with self._session.get(
-            self._backend_selector.websocket_url, headers=self._auth.create_headers()
+            self._backend_selector.websocket_url,
+            headers=self._auth.create_headers(),
+            allow_redirects=False,
         ) as r:
             if r.status != 200:
                 LOGGER.error("Failed to get websocket url: %s", r.status)
