@@ -19,7 +19,7 @@ def gated_set(support_check, label):
         @functools.wraps(func)
         async def wrapper(self, *args, **kwargs):
             if not support_check(self):
-                LOGGER.warning("Model %s has no %s", self.said, label)
+                LOGGER.warning("Appliance does not support %s", label)
                 return False
             return await func(self, *args, **kwargs)
 
@@ -104,7 +104,7 @@ class Appliance(BaseAppliance):
         try:
             await asyncio.wait_for(self._initial_data_event.wait(), timeout=30)
         except TimeoutError:
-            LOGGER.error("Timeout waiting for data for appliance %s", self.said)
+            LOGGER.error("Timeout waiting for appliance data")
             return False
         return True
 

@@ -94,12 +94,14 @@ def _laundry_thing(category: str, cap_part: str) -> dict[str, Any]:
     }
 
 
-def _skip_warning(caplog: pytest.LogCaptureFixture, *words: str) -> bool:
+def _skip_warning(caplog: pytest.LogCaptureFixture) -> bool:
     return any(
         record.levelname == "WARNING"
-        and WASHER_SAID in record.getMessage()
-        and "skipped" in record.getMessage()
-        and all(word in record.getMessage() for word in words)
+        and record.getMessage()
+        == (
+            "Laundry appliance skipped: capability must declare "
+            "exactly one of washer or dryer"
+        )
         for record in caplog.records
     )
 
@@ -145,7 +147,7 @@ async def test_laundry_without_exactly_one_cavity_is_skipped(
         [thing], {"X": {"partNumber": "X", "cavities": cavities}}
     )
     assert manager.all_appliances == {}
-    assert _skip_warning(caplog, "X", named)
+    assert _skip_warning(caplog)
 
 
 async def test_fabriccare_category_is_not_routed(

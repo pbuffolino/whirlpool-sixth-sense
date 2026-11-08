@@ -375,7 +375,7 @@ async def test_state_message_for_unknown_said_leaves_online_alone(
 
     assert mwo.get_online() is False
     assert calls == []
-    assert "unknown appliance UNKNOWN_SAID" in caplog.text
+    assert "unknown appliance" in caplog.text
 
 
 @pytest.mark.parametrize(

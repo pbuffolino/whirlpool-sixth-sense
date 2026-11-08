@@ -17,6 +17,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -26,6 +27,15 @@ LOGGER = logging.getLogger(__name__)
 
 CAPABILITY_DOWNLOAD_TIMEOUT = 10.0
 CAPABILITY_DOWNLOAD_RETRIES = 3
+CAPABILITY_MAX_BYTES = 2 * 1024 * 1024
+# Preserve the trial's supported vendor delivery families. Shared cloud tenants
+# are not proof of Whirlpool ownership; TLS and authenticated MQTT still matter.
+CAPABILITY_HOST_SUFFIXES = (
+    ".amazonaws.com",
+    ".whrcloud.com",
+    ".applianceconnect.net",
+    ".cloudfront.net",
+)
 
 
 class CapabilityDownloadError(Exception):
@@ -321,27 +331,22 @@ class CapabilityDownloader:
         if capability_part_number in self._cache:
             return self._cache[capability_part_number]
 
-        last_err: Exception | None = None
         for attempt in range(CAPABILITY_DOWNLOAD_RETRIES):
             try:
                 raw = await self._download(said, model_number, capability_part_number)
                 self._cache[capability_part_number] = raw
                 return raw
-            except (TimeoutError, CapabilityDownloadError) as e:
-                last_err = e
+            except TimeoutError, CapabilityDownloadError:
                 LOGGER.debug(
-                    "Capability download attempt %d/%d for %s failed: %s",
+                    "Capability download attempt %d/%d failed",
                     attempt + 1,
                     CAPABILITY_DOWNLOAD_RETRIES,
-                    said,
-                    e,
                 )
                 if attempt < CAPABILITY_DOWNLOAD_RETRIES - 1:
                     await asyncio.sleep(2**attempt)
 
         raise CapabilityDownloadError(
-            f"Capability download for {said} failed after "
-            f"{CAPABILITY_DOWNLOAD_RETRIES} attempts: {last_err}"
+            f"Capability download failed after {CAPABILITY_DOWNLOAD_RETRIES} attempts"
         )
 
     async def _download(
@@ -375,14 +380,13 @@ class CapabilityDownloader:
                 )
             except TimeoutError as e:
                 raise CapabilityDownloadError(
-                    f"Timed out waiting for capability response for {said}"
+                    "Timed out waiting for capability response"
                 ) from e
 
             response_code = response.get("responseCode")
             if response_code is not None and response_code != 200:
                 raise CapabilityDownloadError(
-                    f"Capability request for {said} returned "
-                    f"responseCode {response_code}"
+                    "Capability request returned an unsuccessful response code"
                 )
             raw = await self._download_file(response)
             _read_part_number(raw)  # sanity-check before caching
@@ -395,24 +399,52 @@ class CapabilityDownloader:
             )
 
     async def _download_file(self, mqtt_response: dict[str, Any]) -> dict[str, Any]:
-        # The broker replies with {"responseCode": 200, "downloadUrl": "..."}.
+        # Inline capability documents remain supported without an HTTP request.
         url = mqtt_response.get("downloadUrl")
-        if not isinstance(url, str) or not url.startswith("http"):
+        if url is None:
             return mqtt_response
+        if not isinstance(url, str) or len(url) > 4096:
+            raise CapabilityDownloadError("Invalid capability location")
         try:
-            async with self._session.get(url) as resp:
-                if resp.status != 200:
-                    raise CapabilityDownloadError(
-                        f"Capability URL returned HTTP {resp.status}"
-                    )
-                text = await resp.text()
-        except aiohttp.ClientError as e:
-            raise CapabilityDownloadError(
-                f"HTTP error downloading capability file: {e}"
-            ) from e
+            parsed = urlsplit(url)
+            valid = (
+                parsed.scheme == "https"
+                and not parsed.username
+                and not parsed.password
+                and parsed.port in (None, 443)
+                and not parsed.fragment
+                and any(
+                    (parsed.hostname or "").endswith(suffix)
+                    for suffix in CAPABILITY_HOST_SUFFIXES
+                )
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise CapabilityDownloadError("Unsupported capability location")
         try:
-            return json.loads(text)
-        except json.JSONDecodeError as e:
-            raise CapabilityDownloadError(
-                f"Capability body is not valid JSON: {e}"
-            ) from e
+            async with asyncio.timeout(CAPABILITY_DOWNLOAD_TIMEOUT):
+                async with self._session.get(url, allow_redirects=False) as resp:
+                    if resp.status != 200:
+                        raise CapabilityDownloadError("Capability HTTP request failed")
+                    if (
+                        resp.content_length is not None
+                        and resp.content_length > CAPABILITY_MAX_BYTES
+                    ):
+                        raise CapabilityDownloadError("Capability body exceeds limit")
+                    body = bytearray()
+                    async for chunk in resp.content.iter_chunked(65536):
+                        if len(body) + len(chunk) > CAPABILITY_MAX_BYTES:
+                            raise CapabilityDownloadError(
+                                "Capability body exceeds limit"
+                            )
+                        body.extend(chunk)
+        except aiohttp.ClientError, TimeoutError:
+            raise CapabilityDownloadError("Capability HTTP request failed") from None
+        try:
+            raw = json.loads(body)
+        except ValueError, UnicodeDecodeError, RecursionError:
+            raise CapabilityDownloadError("Capability body is not valid JSON") from None
+        if not isinstance(raw, dict):
+            raise CapabilityDownloadError("Capability body must be an object")
+        return raw

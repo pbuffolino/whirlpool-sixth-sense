@@ -63,7 +63,9 @@ class Auth:
         }
 
         async with asyncio.timeout(30):
-            async with self._session.get(WHIRLPOOL_COGNITO_URL, headers=headers) as r:
+            async with self._session.get(
+                WHIRLPOOL_COGNITO_URL, headers=headers, allow_redirects=False
+            ) as r:
                 if r.status != 200:
                     LOGGER.error("Failed to get Cognito identity ID: %s", r.status)
                     raise AuthException(
@@ -73,7 +75,7 @@ class Auth:
                 data = await r.json()
                 self._cognito_identity_id = data.get("identityId")
                 self._cognito_token = data.get("token")
-                LOGGER.debug("Cognito identity ID: %s", self._cognito_identity_id)
+                LOGGER.debug("Cognito identity obtained")
                 if not self._cognito_identity_id:
                     raise AuthException("No identity ID in response")
                 return self._cognito_identity_id
@@ -111,7 +113,9 @@ class Auth:
         }
 
         async with asyncio.timeout(30):
-            async with self._session.post(COGNITO_URL, headers=headers, json=body) as r:
+            async with self._session.post(
+                COGNITO_URL, headers=headers, json=body, allow_redirects=False
+            ) as r:
                 if r.status != 200:
                     raise AuthException(f"Failed to get AWS credentials: {r.status}")
 

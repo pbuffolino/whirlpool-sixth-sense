@@ -1,6 +1,9 @@
 import asyncio
 import json
 import logging
+import os
+import stat
+import tempfile
 from datetime import datetime
 from typing import Any
 
@@ -32,8 +35,28 @@ class Auth:
         self._session: aiohttp.ClientSession = session
 
     def _save_auth_data(self):
-        with open(AUTH_JSON_FILE, "w") as f:
-            json.dump(self._auth_dict, f)
+        # Replace a private temporary file, never truncate/follow the destination.
+        destination = os.path.abspath(AUTH_JSON_FILE)
+        try:
+            metadata = os.lstat(destination)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError("Auth cache destination must be a regular file")
+            if os.name == "posix" and metadata.st_uid != os.getuid():
+                raise ValueError("Auth cache must belong to the current user")
+        except FileNotFoundError:
+            pass
+        fd, temporary = tempfile.mkstemp(
+            prefix=".whirlpool-auth-", dir=os.path.dirname(destination)
+        )
+        try:
+            with os.fdopen(fd, "w") as file:
+                json.dump(self._auth_dict, file)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def _get_auth_body(
         self, refresh_token: str | None, client_creds: BackendConfig
@@ -70,11 +93,13 @@ class Auth:
             auth_data: dict[str, str] = self._get_auth_body(refresh_token, client_creds)
             async with asyncio.timeout(30):
                 async with self._session.post(
-                    auth_url, data=auth_data, headers=auth_header
+                    auth_url, data=auth_data, headers=auth_header, allow_redirects=False
                 ) as r:
                     LOGGER.debug("Auth status: " + str(r.status))
                     if r.status == 200:
                         return await r.json()
+                    if 300 <= r.status < 400:
+                        return None
                     if r.status == 423:
                         raise AccountLockedError()
                     elif refresh_token:
@@ -106,9 +131,31 @@ class Auth:
 
     async def load_auth_file(self):
         try:
-            with open(AUTH_JSON_FILE) as f:
+            before = os.lstat(AUTH_JSON_FILE)
+            if not stat.S_ISREG(before.st_mode):
+                raise ValueError("Auth cache must be a regular file")
+            flags = (
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0)
+            )
+            fd = os.open(AUTH_JSON_FILE, flags)
+            with os.fdopen(fd) as file:
+                metadata = os.fstat(file.fileno())
+                if (
+                    not stat.S_ISREG(metadata.st_mode)
+                    or metadata.st_ino != before.st_ino
+                    or metadata.st_dev != before.st_dev
+                ):
+                    raise ValueError("Auth cache changed while opening")
+                if os.name == "posix" and (
+                    metadata.st_uid != os.getuid() or metadata.st_mode & 0o077
+                ):
+                    raise ValueError(
+                        "Auth cache must be owned privately by the current user"
+                    )
                 LOGGER.info("Loading auth from file")
-                self._auth_dict = json.load(f)
+                self._auth_dict = json.load(file)
         except FileNotFoundError:
             pass
 
@@ -141,7 +188,9 @@ class Auth:
         }
 
         async with self._session.get(
-            self._backend_selector.user_details_url, headers=headers
+            self._backend_selector.user_details_url,
+            headers=headers,
+            allow_redirects=False,
         ) as r:
             if r.status != 200:
                 LOGGER.error(f"Failed to get account id: {r.status}")

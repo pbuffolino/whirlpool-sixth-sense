@@ -58,23 +58,18 @@ class Things:
                     request_url = url
                 async with asyncio.timeout(30):
                     async with self._session.get(
-                        request_url, headers=headers
+                        request_url, headers=headers, allow_redirects=False
                     ) as response:
                         if response.status != 200:
-                            error_text = await response.text()
                             LOGGER.error(
-                                "Failed to list things: %s - %s",
-                                response.status,
-                                error_text,
+                                "Failed to list things: HTTP %d", response.status
                             )
                             break
 
                         data = await response.json()
                         things = data.get("things", [])
                         all_things.extend(things)
-                        LOGGER.debug(
-                            "Retrieved %d things from group %s", len(things), group_name
-                        )
+                        LOGGER.debug("Retrieved %d things", len(things))
 
                         # Check for pagination
                         next_token = data.get("nextToken")
@@ -82,11 +77,11 @@ class Things:
                             break
 
         except TimeoutError:
-            LOGGER.error("Timeout while listing things in group %s", group_name)
-        except aiohttp.ClientError as e:
-            LOGGER.error("HTTP error while listing things: %s", e)
-        except Exception as e:
-            LOGGER.error("Error listing things: %s", e)
+            LOGGER.error("Timeout while listing things")
+        except aiohttp.ClientError:
+            LOGGER.error("HTTP error while listing things")
+        except Exception:
+            LOGGER.error("Error listing things")
 
         # Fetch full data for each thing
         things_with_data: list[dict[str, Any]] = []
@@ -113,25 +108,21 @@ class Things:
 
         try:
             async with asyncio.timeout(30):
-                async with self._session.get(url, headers=headers) as response:
+                async with self._session.get(
+                    url, headers=headers, allow_redirects=False
+                ) as response:
                     if response.status != 200:
-                        error_text = await response.text()
-                        LOGGER.error(
-                            "Failed to get thing %s: %s - %s",
-                            thing_name,
-                            response.status,
-                            error_text,
-                        )
+                        LOGGER.error("Failed to get thing: HTTP %d", response.status)
                         return None
 
                     data = await response.json()
-                    LOGGER.debug("Retrieved thing data for %s", thing_name)
+                    LOGGER.debug("Retrieved thing data")
                     return data
 
         except TimeoutError:
-            LOGGER.error("Timeout while getting thing %s", thing_name)
-        except aiohttp.ClientError as e:
-            LOGGER.error("HTTP error while getting thing %s: %s", thing_name, e)
-        except Exception as e:
-            LOGGER.error("Error getting thing %s: %s", thing_name, e)
+            LOGGER.error("Timeout while getting thing")
+        except aiohttp.ClientError:
+            LOGGER.error("HTTP error while getting thing")
+        except Exception:
+            LOGGER.error("Error getting thing")
         return None
